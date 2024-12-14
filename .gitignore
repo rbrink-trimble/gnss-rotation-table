@@ -1,0 +1,6 @@
+*.swp
+*.pyc
+*.pyo
+README.html
+_*
+__pychache__

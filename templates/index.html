@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Back and Forth</title>
+</head>
+<body>
+    <h1>Back and Forth Operation</h1>
+
+    <!-- Form for user input -->
+    <form id="control-form" style="display: flex; gap: 20px;">
+       <!-- Left Column: Motor Parameters -->
+        <div style="flex: 1;">
+            <h2>Test Parameters</h2>
+
+            <label for="number">Number of repetitions:</label>
+            <input type="number" id="number" name="number" value="5" min="1"><br><br>
+
+            <label for="degrees_fwd">Degrees Forward:</label>
+            <input type="number" step="0.1" id="degrees_fwd" name="degrees_fwd" value="20"><br><br>
+
+            <label for="degrees_back">Degrees Back:</label>
+            <input type="number" step="0.1" id="degrees_back" name="degrees_back" value="15"><br><br>
+
+            <label for="home_start">Home at Start:</label>
+            <input type="checkbox" id="home_start" name="home_start" checked><br><br>
+
+            <label for="home_end">Home at End:</label>
+            <input type="checkbox" id="home_end" name="home_end"><br><br>
+        </div>
+
+        <!-- Right Column: Test Parameters -->
+        <div style="flex: 1;">
+            <h2>Motor Parameters</h2>
+
+            <label for="dry_run">Dry Run:</label>
+            <input type="checkbox" id="dry_run" name="dry_run"><br><br>
+
+            <label for="velocity">Velocity:</label>
+            <input type="number" step="0.1" id="velocity" name="velocity" value="3.0"><br><br>
+
+            <label for="accel">Acceleration:</label>
+            <input type="number" step="0.1" id="accel" name="accel" value="2.0"><br><br>
+
+            <label for="sleep_seconds">Sleep Seconds:</label>
+            <input type="number" step="0.1" id="sleep_seconds" name="sleep_seconds" value="1.0"><br><br>
+        </div>
+    </form>
+
+    <!-- Start and Stop buttons -->
+    <button id="home-button">Move Home</button>
+    <button id="fwd-button">Move Forward</button>
+    <button id="back-button">Move Back</button>
+    <button id="start-button">Start Test</button>
+    <button id="stop-button" disabled>Stop</button>
+
+    <!-- Text area to display real-time progress updates -->
+    <h2>Progress</h2>
+    <textarea id="progress-log" rows="25" cols="80" readonly></textarea>
+
+
+
+
+    <script>
+        const homeButton = document.getElementById('home-button');
+        const fwdButton = document.getElementById('fwd-button');
+        const backButton = document.getElementById('back-button');
+        const startButton = document.getElementById('start-button');
+        const stopButton = document.getElementById('stop-button');
+        const progressLog = document.getElementById('progress-log');
+
+        let eventSource = null;
+        let isRunning = false; // Track whether an operation is running
+
+        // Function to start a new operation and report progress
+        function startOperation(params) {
+            // Prevent starting another operation if one is already running
+            if (isRunning) {
+                return;
+            }
+
+            isRunning = true; // Set flag to indicate that an operation is running
+
+            // Close existing event source if one is already running
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            // Open a new connection for progress updates
+            eventSource = new EventSource(`/progress?${params}`);
+
+            // Listen for updates and print them in the progress log
+            eventSource.onmessage = (event) => {
+                progressLog.value += event.data + '\n';
+                progressLog.scrollTop = progressLog.scrollHeight; // Auto-scroll to the bottom
+            };
+
+            eventSource.onerror = (event) => {
+                // Handle any errors or disconnections from the event stream
+                console.error("Error in event source:", event);
+                stopOperation();
+            };
+
+            stopButton.disabled = false; // Enable stop button
+            disableButtons();
+        }
+
+        // Home button logic
+        homeButton.addEventListener('click', () => {
+            if (isRunning) return;
+            const formData = new FormData(document.getElementById('control-form'));
+            const params = new URLSearchParams(formData);
+
+            // Modify parameters for the Home button
+            params.set('number', 0); // Set number to 0 for home
+            params.set('home_start', 'true'); // Force home_start to true
+            params.set('home_end', 'false'); // Force home_end to false
+
+            startOperation(params.toString());
+        });
+
+        // Forward button logic
+        fwdButton.addEventListener('click', () => {
+            if (isRunning) return;
+            const formData = new FormData(document.getElementById('control-form'));
+            const params = new URLSearchParams(formData);
+
+            // Modify parameters for the Move button
+            //params.set('dry_run', 'true');
+            params.set('number', '1'); // Set number to 1 for a single move
+            params.set('degrees_back', 0); // Set number to 1 for a single move
+            params.set('sleep_seconds', 0); // Set number to 1 for a single move
+            params.set('home_start', 'false'); // Disable homing at start
+            params.set('home_end', 'false'); // Disable homing at end
+
+            startOperation(params.toString());
+        });
+
+        // Backward button logic
+        backButton.addEventListener('click', () => {
+            if (isRunning) return;
+            const formData = new FormData(document.getElementById('control-form'));
+            const params = new URLSearchParams(formData);
+
+            // Modify parameters for the Move button
+            //arams.set('dry_run', 'true');
+            params.set('number', '1'); // Set number to 1 for a single move
+            params.set('degrees_fwd', 0); // Set number to 1 for a single move
+            params.set('sleep_seconds', 0); // Set number to 1 for a single move
+            params.set('home_start', 'false'); // Disable homing at start
+            params.set('home_end', 'false'); // Disable homing at end
+
+            startOperation(params.toString());
+        });
+
+        // Start button logic
+        startButton.addEventListener('click', () => {
+            if (isRunning) return;
+            const formData = new FormData(document.getElementById('control-form'));
+            const params = new URLSearchParams(formData);
+
+            startOperation(params.toString());
+            //isRunning = false;
+        });
+
+        // Stop button logic
+        stopButton.addEventListener('click', () => {
+            stopOperation();
+        });
+
+        // Stop current operation
+        function stopOperation() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            isRunning = false; // Reset the running flag
+            stopButton.disabled = true; // Disable stop button
+            enableButtons(); // Re-enable buttons after stop
+        }
+
+        // Disable all control buttons (except Stop)
+        function disableButtons() {
+            homeButton.disabled = true;
+            fwdButton.disabled = true;
+            backButton.disabled = true;
+            startButton.disabled = true;
+        }
+
+        // Enable all control buttons
+        function enableButtons() {
+            homeButton.disabled = false;
+            fwdButton.disabled = false;
+            backButton.disabled = false;
+            startButton.disabled = false;
+        }
+    </script>
+
+</body>
+</html>
+
